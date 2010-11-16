@@ -37,7 +37,6 @@ module EM::RemoteCall::Server
   include EM::JsonConnection::Server
   
   def json_parsed(hash)
-    p hash
     remote_call = EM::RemoteCall::Call.new hash[:instance], hash[:method].to_sym, hash[:argument]
     return_value = remote_call.call do |blk_value|
       send_data({:callback_id => hash[:callback_id], :argument => blk_value}) if hash[:callback_id]

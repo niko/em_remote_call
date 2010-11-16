@@ -46,7 +46,6 @@ module EM::RemoteCall::Client
   include EM::JsonConnection::Client
   
   def json_parsed(hash)
-    p hash
     if id = hash[:callback_id]
       if callb = EM::RemoteCall::Callback.find(id)
         callb.call hash[:argument]
