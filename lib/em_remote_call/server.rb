@@ -7,10 +7,10 @@ class EM::RemoteCall::Call
     @method, @argument = method, argument
     
     if indentifier = instance_opts[:id]
-      klass = Object.const_defined?(klass) && Object.const_get(klass) or return false
+      klass = EM::RemoteCall::Utils.constantize(klass) or return false
       @instance = klass.find(indentifier)
     else
-      @instance = Object.const_defined?(klass) && Object.const_get(klass) or return false
+      @instance = EM::RemoteCall::Utils.constantize(klass) or return false
     end
     
   end
