@@ -10,7 +10,7 @@ module EM::RemoteCall
     define_method name do |*method_opts, &callb|
       return unless self.class.remote_connection
       
-      if !block_given? && method_opts.last.is_a?(Proc)
+      if !callb && method_opts.last.is_a?(Proc)
         callb = method_opts.pop
       end
       if method_opts.last.is_a? Proc

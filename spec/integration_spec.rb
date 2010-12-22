@@ -79,13 +79,26 @@ describe EM::RemoteCall do
     end
   end
   describe "return values" do
-    it "should be passed to the second proc" do
-      test_on_client do
-        callb = mock(:callb)
-        callb.should_receive(:bar).with('started a - b')
-        c = ClientTrack.new(:title => 'a', :artist => 'b')
-        c.init_track_on_server(:title => 'a', :artist => 'b')
-        c.play proc{|a| callb.bar a}, proc{}
+    describe "with two procs" do
+      it "should be passed to the first proc" do
+        test_on_client do
+          callb = mock(:callb)
+          callb.should_receive(:bar).with('started a - b')
+          c = ClientTrack.new(:title => 'a', :artist => 'b')
+          c.init_track_on_server(:title => 'a', :artist => 'b')
+          c.play proc{|a| callb.bar a}, proc{}
+        end
+      end
+    end
+    describe "with a proc and a block" do
+      it "should be passed to the proc" do
+        test_on_client do
+          callb = mock(:callb)
+          callb.should_receive(:bar).with('started a - b')
+          c = ClientTrack.new(:title => 'a', :artist => 'b')
+          c.init_track_on_server(:title => 'a', :artist => 'b')
+          c.play proc{|a| callb.bar a} {}
+        end
       end
     end
   end
