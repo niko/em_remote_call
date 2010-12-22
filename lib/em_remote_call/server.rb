@@ -1,30 +1,28 @@
 module EM::RemoteCall; end
 
 class EM::RemoteCall::Call
+  class Error < StandardError; end
+  class NoInstanceError         < Error ; end
+  class NoMethodGivenError      < Error; end
+  class NoMethodOfInstanceError < Error; end
+  
   def initialize(instance_opts, method, argument)
-    klass = instance_opts[:class] or return false
-    
-    @method, @argument = method, argument
-    
-    if indentifier = instance_opts[:id]
-      klass = EM::RemoteCall::Utils.constantize(klass) or return false
-      @instance = klass.find(indentifier)
-    else
-      @instance = EM::RemoteCall::Utils.constantize(klass) or return false
-    end
-    
+    @argument = argument
+    @method   = method                       or raise NoMethodError.new method
+    @instance = find_instance(instance_opts) or raise NoInstanceError.new instance_opts
+    @instance.respond_to?(@method)           or raise NoMethodOfInstanceError.new "#{@instance}##{method}"
   end
   
-  def valid?
-    @instance && @method && @instance.respond_to?(@method)
+  def find_instance(args)
+    if args[:id]
+      klass = EM::RemoteCall::Utils.constantize(args[:class])      or return false
+      @instance = klass.find(args[:id])                            or return false
+    else
+      @instance = EM::RemoteCall::Utils.constantize(args[:class])  or return false
+    end
   end
   
   def call(&callb)
-    unless valid?
-      puts "invalid remote call: :instance => #{@instance}, :method => #{@method}, :argument => #{@argument}"
-      return false
-    end
-    
     if @argument
       @instance.__send__ @method, @argument, &callb
     else
@@ -38,10 +36,13 @@ module EM::RemoteCall::Server
   
   def json_parsed(hash)
     remote_call = EM::RemoteCall::Call.new hash[:instance], hash[:method].to_sym, hash[:argument]
-    return_value = remote_call.call do |blk_value|
-      send_data({:callback_id => hash[:callback_id], :argument => blk_value}) if hash[:callback_id]
-    end
-    send_data({:callback_id => hash[:return_block_id], :argument => return_value}) if hash[:return_block_id]
     
+    remote_call.call do |blk_value|
+      send_data({:deferrable_id => hash[:deferrable_id], :success => blk_value})
+    end
+    
+  rescue => e
+    puts "#{e}: #{e.message}"
+    send_data( { :deferrable_id => hash[:deferrable_id], :error => {:class => e.class.name, :message => e.message} } )
   end
 end

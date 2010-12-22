@@ -5,7 +5,7 @@ require 'em_remote_call'
 class Track
   attr_reader :title, :artist
   
-  def initialize(opts)
+  def initialize(opts={})
     @title, @artist = opts[:title], opts[:artist]
     super
   end
@@ -27,12 +27,16 @@ class ServerTrack < Track
     callb.call "finished #{id}"
     "started #{id}"
   end
+  def raise_hell
+    EM.next_tick{raise 'foobar'}
+  end
 end
 
 class ClientTrack < Track
   extend EM::RemoteCall
   remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
   remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
+  remote_method :raise_hell,           :class_name => 'ServerTrack', :find_by => :id
 end
 
 class EMController
@@ -63,7 +67,7 @@ describe EM::RemoteCall do
       test_on_client do
         callb = mock(:callb)
         callb.should_receive(:foo)
-        ClientTrack.new({}).init_track_on_server({}){callb.foo}
+        ClientTrack.new.init_track_on_server({}){callb.foo}
       end
     end
   end
@@ -78,29 +82,16 @@ describe EM::RemoteCall do
       end
     end
   end
-  describe "return values" do
-    describe "with two procs" do
-      it "should be passed to the first proc" do
-        test_on_client do
-          callb = mock(:callb)
-          callb.should_receive(:bar).with('started a - b')
-          c = ClientTrack.new(:title => 'a', :artist => 'b')
-          c.init_track_on_server(:title => 'a', :artist => 'b')
-          c.play proc{|a| callb.bar a}, proc{}
-        end
-      end
-    end
-    describe "with a proc and a block" do
-      it "should be passed to the proc" do
-        test_on_client do
-          callb = mock(:callb)
-          callb.should_receive(:bar).with('started a - b')
-          c = ClientTrack.new(:title => 'a', :artist => 'b')
-          c.init_track_on_server(:title => 'a', :artist => 'b')
-          c.play proc{|a| callb.bar a} {}
-        end
+  describe "errbacks" do
+    it "should take an errback method" do
+      test_on_client do
+        callb = mock(:callb)
+        callb.should_receive(:foo).with({:class=>"RuntimeError", :message=>"foobar"})
+        c = ClientTrack.new(:title => 'a', :artist => 'b')
+        c.init_track_on_server(:title => 'a', :artist => 'b')
+        play_call = c.raise_hell
+        play_call.errback{|a| callb.foo a}
       end
     end
   end
 end
-

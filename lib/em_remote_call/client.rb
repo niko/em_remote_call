@@ -10,35 +10,32 @@ module EM::RemoteCall
     define_method name do |*method_opts, &callb|
       return unless self.class.remote_connection
       
-      if !callb && method_opts.last.is_a?(Proc)
-        callb = method_opts.pop
-      end
-      if method_opts.last.is_a? Proc
-        return_block = method_opts.pop
-      end
-      argument = method_opts.shift
+      callback = EM::RemoteCall::Deferrable.new
+      callback.callback(&callb) if callb
       
-      remote_method = opts[:calls] || name
-      klass         = opts[:class_name] || self.class.to_s
-      id            = opts[:find_by] && send(opts[:find_by]) # when it's nil, it's considered a class method.
+      call = {
+        :argument => method_opts.first,                     # evt. other args will get dropped
+        :instance => {
+          :class => opts[:class_name] || self.class.to_s,   # own class name by default
+          :id => opts[:find_by] && send(opts[:find_by])     # when it's nil, it's considered a class method.
+        },
+        :method => opts[:calls] || name,                    # same method name by default
+        :deferrable_id => callback.object_id                  # store the callbacks object_id to retrieve it later
+      }
       
-      call = {:argument => argument, :instance => {:class => klass, :id => id}, :method => remote_method}
-      self.class.remote_connection.call(call, callb, return_block)
+      self.class.remote_connection.call call
+      return callback
     end
   end
 end
 
-class EM::RemoteCall::Callback
+class EM::RemoteCall::Deferrable
+  include EventMachine::Deferrable
   is_a_collection :object_id
   
-  def initialize(&callb)
-    @callback = callb
-    super
-  end
-  
-  def call(arg)
-    @callback.call arg
+  def set_deferred_status status, *args
     remove_from_collection
+    super
   end
 end
 
@@ -46,22 +43,13 @@ module EM::RemoteCall::Client
   include EM::JsonConnection::Client
   
   def json_parsed(hash)
-    if id = hash[:callback_id]
-      if callb = EM::RemoteCall::Callback.find(id)
-        callb.call hash[:argument]
-      end
-    end
+    id = hash[:deferrable_id]
+    deffr = EM::RemoteCall::Deferrable.find(id)
+    deffr.succeed hash[:success] if hash.has_key? :success
+    deffr.fail    hash[:error]   if hash.has_key? :error
   end
   
-  def call(call, callb, return_block)
-    if callb
-      callb = EM::RemoteCall::Callback.new(&callb)
-      call.merge!({ :callback_id => callb.object_id })
-    end
-    if return_block
-      return_block = EM::RemoteCall::Callback.new(&return_block)
-      call.merge!({ :return_block_id => return_block.object_id })
-    end
+  def call(call)
     send_data call
   end
 end
