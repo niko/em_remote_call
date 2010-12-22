@@ -8,7 +8,10 @@ module EM::RemoteCall
     end
     
     define_method name do |*method_opts, &callb|
-      return unless self.class.remote_connection
+      remote_connection =
+        (self.class.respond_to?(:remote_connection) && self.class.remote_connection) ||
+        (self.respond_to?(:remote_connection)       && self.remote_connection)
+      return unless remote_connection
       
       callback = EM::RemoteCall::Deferrable.new
       callback.callback(&callb) if callb
@@ -23,7 +26,7 @@ module EM::RemoteCall
         :deferrable_id => callback.object_id                  # store the callbacks object_id to retrieve it later
       }
       
-      self.class.remote_connection.call call
+      remote_connection.call call
       return callback
     end
   end

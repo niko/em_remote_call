@@ -27,6 +27,11 @@ class ServerTrack < Track
       callb.call "finished #{id}"
     end
   end
+  
+  def self.foo(&block)
+    p 'foo'
+    block.call
+  end
 end
 
 class ClientTrack < Track
@@ -38,6 +43,11 @@ class ClientTrack < Track
   extend EM::RemoteCall
   remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
   remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
+  
+  class << self
+    extend EM::RemoteCall
+    remote_method :foo, :class_name => 'ServerTrack'
+  end
 end
 
 socket = File.join( File.expand_path(File.dirname(__FILE__)), 'test_socket' )
@@ -58,6 +68,10 @@ EM.fork_reactor do
   
   track_one = ClientTrack.new :title => 'Smells like Teen Spirit', :artist => 'Nirvana'
   track_two = ClientTrack.new :title => 'Concrete Schoolyards',    :artist => 'J5'
+  
+  f = ClientTrack.foo
+  f.callback{p 'food'}
+  f.errback{|e| p e}
   
   EM.add_timer 1 do
     track_one.play(2){|v| puts "finished: #{v}"}

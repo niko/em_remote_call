@@ -23,11 +23,7 @@ class EM::RemoteCall::Call
   end
   
   def call(&callb)
-    if @argument
-      @instance.__send__ @method, @argument, &callb
-    else
-      @instance.__send__ @method, &callb
-    end
+    @argument ? @instance.__send__(@method, @argument, &callb) : @instance.__send__(@method, &callb)
   end
 end
 

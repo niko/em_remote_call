@@ -30,6 +30,9 @@ class ServerTrack < Track
   def raise_hell
     raise 'foobar'
   end
+  def self.some_class_meth
+    yield
+  end
 end
 
 class ClientTrack < Track
@@ -37,6 +40,11 @@ class ClientTrack < Track
   remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
   remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
   remote_method :raise_hell,           :class_name => 'ServerTrack', :find_by => :id
+  
+  class << self
+    extend EM::RemoteCall
+    remote_method :some_class_meth, :class_name => 'ServerTrack'
+  end
 end
 
 class EMController
@@ -91,6 +99,15 @@ describe EM::RemoteCall do
         c.init_track_on_server(:title => 'a', :artist => 'b')
         play_call = c.raise_hell
         play_call.errback{|a| callb.foo a}
+      end
+    end
+  end
+  describe "client side class method" do
+    it "should work :)" do
+      test_on_client do
+        callb = mock(:callb)
+        callb.should_receive(:foo)
+        ClientTrack.some_class_meth{callb.foo}
       end
     end
   end
