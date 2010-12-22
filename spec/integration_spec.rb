@@ -28,7 +28,7 @@ class ServerTrack < Track
     "started #{id}"
   end
   def raise_hell
-    EM.next_tick{raise 'foobar'}
+    raise 'foobar'
   end
 end
 
