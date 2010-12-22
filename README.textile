@@ -58,8 +58,7 @@ h2. Example (explaining example.rb)
 
 Say we have an ordinary Track class:
 
-<pre><code>
-class Track
+<pre><code>class Track
   attr_reader :title, :artist
 
   def initialize(opts)
@@ -79,8 +78,7 @@ This class contains the similar functionality on the server and the client. Note
 
 The server adds a #play method to the class:
 
-<pre><code>
-class ServerTrack < Track
+<pre><code>class ServerTrack < Track
   is_a_collection
 
   def play(timer=3, &callb)
@@ -97,8 +95,7 @@ Note the use of the is_a_collection gem. It provides a #find method and by defau
 
 This is the enhancement of the Track class on the client side:
 
-<pre><code>
-class ClientTrack < Track
+<pre><code>class ClientTrack < Track
   def initialize(opts)
     super
     init_track_on_server :title => title, :artist => artist
@@ -119,8 +116,7 @@ Note that on initialization of a ClientTrack we initialize a ServerTrack on the 
 
 The reactor code for the server simply looks like this:
 
-<pre><code>
-EM.run do
+<pre><code>EM.run do
   EM::RemoteCall::Server.start_at /tmp/foo
 end
 </code></pre>
@@ -129,8 +125,7 @@ Nothing to see here. We just start the remote call server.
 
 On the client we then drive the remote server:
 
-<pre><code>
-EM.run do
+<pre><code>EM.run do
   ClientTrack.remote_connection = EM::RemoteCall::Client.connect_to socket
 
   track_one = ClientTrack.new :title => 'Smells like Teen Spirit', :artist => 'Nirvana'
