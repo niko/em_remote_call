@@ -26,8 +26,6 @@ class ServerTrack < Track
     EM.add_timer timer do
       callb.call "finished #{id}"
     end
-    
-    "started #{id}"
   end
 end
 
@@ -62,9 +60,7 @@ EM.fork_reactor do
   track_two = ClientTrack.new :title => 'Concrete Schoolyards',    :artist => 'J5'
   
   EM.add_timer 1 do
-    track_one.play 3,
-      proc{|v| puts "server returning #{v}"},
-      proc{|v| puts "server callback returning #{v}"}
+    track_one.play(2){|v| puts "finished: #{v}"}
   end
   
   EM.add_timer 2 do

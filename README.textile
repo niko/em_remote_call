@@ -1,0 +1,153 @@
+h1. EM::RemoteCall
+
+EM::RemoteCall provides an Eventmachine server/client couple which allows the client to call methods within the server process. Local callbacks and errbacks on the client are supported, yielding the value of the server callback.
+
+The most usual case is the following: You have a Book class on the client and the server. Then the client wants to call methods on Book instances on the server. In order to make this work, the servers Book class has to provide a method to identify its instances. ORMs do that via an ID and a .find class method. The is_a_collection gem (https://rubygems.org/gems/is_a_collection) provides similar functionality for non-ORM classes. The call to the client makes looks like this:
+
+<pre><code>{:opts => method_opts, :instance => {:class => klass, :id => id}, :method => remote_method}
+</code></pre>
+
+or
+
+That means, if the client has a book instance @book with the id 1234 and calls #read on it:
+
+<pre><code>@book.read 'fast'
+</code></pre>
+
+the call is sent to the server like this:
+
+<pre><code>{:opts => 'fast', :instance => {:class => Book, :id => 1234}, :method => 'read'}
+</code></pre>
+
+and this gets executed on the server:
+
+<pre><code>Book.find(1234).read('fast')
+</code></pre>
+
+:opts can be anything that JSON encodable and parseable. Namely Strings, Numbers, Arrays and Hashes.
+
+EM::RemoteCall supports callbacks. So when you call the method on the client with a block given, the block get's stored on the client for later execution. Note that it doesn't go over the wire. While this would technically be possible, there are some issues with it. When the method on the server takes a block, the callback on the client will get triggered as soon as the block on the server is called. Example:
+
+On the client
+
+<pre><code>@book.read('fast'){puts 'finished'}
+</code></pre>
+
+then proc{puts 'finished'} get's stored for later execution, referenced by a callback id. This goes over the wire:
+
+<pre><code>{:opts => 'fast', :instance => {:class => Book, :id => 1234}, :method => 'read', :callback_id => 5678}
+</code></pre>
+
+Now this gets executed on the server:
+
+<pre><code>Book.find(1234).read('fast'){ send_data({:callback_id => 5678}) }
+</code></pre>
+
+As soon, as the block of #read is called on the server, this message goes back over the wire to the client:
+
+<pre><code>{:callback_id => 5678}
+</code></pre>
+
+and this in turn triggers the execution of the formerly stored callback on the client.
+
+A special case are class methods. In the wire protocol they are just identified by :instance => {:id => nil}. In the definition just skip the :find_by parameter.
+
+Return values of remote methods and arguments to callback are supported, too. See specs for further examples.
+
+h2. Example (explaining example.rb)
+
+Say we have an ordinary Track class:
+
+<pre><code>
+class Track
+  attr_reader :title, :artist
+
+  def initialize(opts)
+    @title, @artist = opts[:title], opts[:artist]
+
+    puts "new track: #{title} - #{artist} (#{self.class})"
+    super
+  end
+
+  def id
+    "#{title} - #{artist}"
+  end
+end
+</code></pre>
+
+This class contains the similar functionality on the server and the client. Note the definition of the #id method. It serves as an identifier for tracks on the client and the server.
+
+The server adds a #play method to the class:
+
+<pre><code>
+class ServerTrack < Track
+  is_a_collection
+
+  def play(timer=3, &callb)
+    puts "playing: #{id} (for #{timer} seconds...)"
+
+    EM.add_timer timer do
+      callb.call "finished #{id}"
+    end
+  end
+end
+</code></pre>
+
+Note the use of the is_a_collection gem. It provides a #find method and by default it does the lookup via the #id method (that's why we defined this above, remember?). Also note that there is no remote call specific code here. In this regards the server is completely agnostic of it being used by the client.
+
+This is the enhancement of the Track class on the client side:
+
+<pre><code>
+class ClientTrack < Track
+  def initialize(opts)
+    super
+    init_track_on_server :title => title, :artist => artist
+  end
+
+  extend EM::RemoteCall
+  remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
+  remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
+end
+</code></pre>
+
+Here, we're specifying the remote methods. It illustrates two cases:
+
+* #init_track_on_server doesn't specify a :find_by parameter. #init_track_on_server is a instance method on the client, but call the #new class method on the server.
+* #play specifies a :find_by parameter, therefor it's an instance method on the server, too.
+
+Note that on initialization of a ClientTrack we initialize a ServerTrack on the server, too.
+
+The reactor code for the server simply looks like this:
+
+<pre><code>
+EM.run do
+  EM::RemoteCall::Server.start_at /tmp/foo
+end
+</code></pre>
+
+Nothing to see here. We just start the remote call server.
+
+On the client we then drive the remote server:
+
+<pre><code>
+EM.run do
+  ClientTrack.remote_connection = EM::RemoteCall::Client.connect_to socket
+
+  track_one = ClientTrack.new :title => 'Smells like Teen Spirit', :artist => 'Nirvana'
+  track_two = ClientTrack.new :title => 'Concrete Schoolyards',    :artist => 'J5'
+
+  EM.add_timer 1 do
+    track_one.play(2){|v| puts "finished: #{v}"}
+  end
+
+  EM.add_timer 2 do
+    track_two.play{ puts "finished J5!" }
+  end
+end
+</code></pre>
+
+First we open the connection to the server, then we initialize two tracks. As stated above: on initialization on the client side the tracks start tu exist on the server side, too. After one second we tell the server to play the first track for 2 seconds and after another second the second (defaults to 3 seconds).
+
+h2. TODO
+
+* more specs (at the moment there are no unit spec, but just integration specs)
