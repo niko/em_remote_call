@@ -56,6 +56,8 @@ Return values of remote methods and arguments to callback are supported, too. Se
 
 h2. Example (explaining example.rb)
 
+h3. Common Track class
+
 Say we have an ordinary Track class:
 
 <pre><code>class Track
@@ -76,6 +78,8 @@ end
 
 This class contains the similar functionality on the server and the client. Note the definition of the #id method. It serves as an identifier for tracks on the client and the server.
 
+h3. ServerTrack class
+
 The server adds a #play method to the class:
 
 <pre><code>class ServerTrack < Track
@@ -92,6 +96,8 @@ end
 </code></pre>
 
 Note the use of the is_a_collection gem. It provides a #find method and by default it does the lookup via the #id method (that's why we defined this above, remember?). Also note that there is no remote call specific code here. In this regards the server is completely agnostic of it being used by the client.
+
+h3. ClientTrack class
 
 This is the enhancement of the Track class on the client side:
 
@@ -116,12 +122,16 @@ Note that on initialization of a ClientTrack we initialize a ServerTrack on the 
 
 The reactor code for the server simply looks like this:
 
+h3. Running the server
+
 <pre><code>EM.run do
   EM::RemoteCall::Server.start_at /tmp/foo
 end
 </code></pre>
 
 Nothing to see here. We just start the remote call server.
+
+h3. The client
 
 On the client we then drive the remote server:
 
