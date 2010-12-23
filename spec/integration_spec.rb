@@ -30,6 +30,12 @@ class ServerTrack < Track
   def raise_hell
     raise 'foobar'
   end
+  def with_deferrable(outcome = 'succeed') # does not take a block
+    d = EventMachine::DefaultDeferrable.new
+    d.send outcome
+    return d
+  end
+  
   def self.some_class_meth
     yield
   end
@@ -40,6 +46,7 @@ class ClientTrack < Track
   remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
   remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
   remote_method :raise_hell,           :class_name => 'ServerTrack', :find_by => :id
+  remote_method :with_deferrable,      :class_name => 'ServerTrack', :find_by => :id
   
   class << self
     extend EM::RemoteCall
@@ -108,6 +115,45 @@ describe EM::RemoteCall do
         callb = mock(:callb)
         callb.should_receive(:foo)
         ClientTrack.some_class_meth{callb.foo}
+      end
+    end
+  end
+  describe "with a deferrable" do
+    describe "on success" do
+      describe "with a block" do
+        it "should use the block as callback" do
+          test_on_client do
+            callb = mock(:callb)
+            callb.should_receive(:foo).with()
+            c = ClientTrack.new
+            c.init_track_on_server({})
+            c.with_deferrable(:succeed){ callb.foo }
+          end
+        end
+      end
+      describe "with callback" do
+        it "should use callback" do
+          test_on_client do
+            callb = mock(:callb)
+            callb.should_receive(:foo).with()
+            c = ClientTrack.new
+            c.init_track_on_server({})
+            play_call = c.with_deferrable(:succeed)
+            play_call.callback{ callb.foo }
+          end
+        end
+      end
+    end
+    describe "on error" do
+      it "should use errback" do
+        test_on_client do
+          callb = mock(:callb)
+          callb.should_receive(:foo).with()
+          c = ClientTrack.new
+          c.init_track_on_server({})
+          play_call = c.with_deferrable(:fail)
+          play_call.errback{ callb.foo }
+        end
       end
     end
   end

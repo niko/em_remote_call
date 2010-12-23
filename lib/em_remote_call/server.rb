@@ -33,8 +33,17 @@ module EM::RemoteCall::Server
   def json_parsed(hash)
     remote_call = EM::RemoteCall::Call.new hash[:instance], hash[:method].to_sym, hash[:argument]
     
-    remote_call.call do |blk_value|
-      send_data({:deferrable_id => hash[:deferrable_id], :success => blk_value})
+    ret = remote_call.call do |result|
+      send_data({:deferrable_id => hash[:deferrable_id], :success => result})
+    end
+    
+    if ret.is_a? EM::Deferrable
+      ret.callback do |result|
+        send_data({:deferrable_id => hash[:deferrable_id], :success => result})
+      end
+      ret.errback do |result|
+        send_data({:deferrable_id => hash[:deferrable_id], :error => result})
+      end
     end
     
   rescue => e
