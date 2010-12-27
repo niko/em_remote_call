@@ -2,59 +2,189 @@ h1. EM::RemoteCall
 
 EM::RemoteCall provides an Eventmachine server/client couple which allows the client to call methods within the server process. Local callbacks and errbacks on the client are supported, yielding the value of the server callback.
 
-The most usual case is the following: You have a Book class on the client and the server. Then the client wants to call methods on Book instances on the server. In order to make this work, the servers Book class has to provide a method to identify its instances. ORMs do that via an ID and a .find class method. The is_a_collection gem (https://rubygems.org/gems/is_a_collection) provides similar functionality for non-ORM classes. The call to the client makes looks like this:
+h2. Overview
 
-<pre><code>{:opts => method_opts, :instance => {:class => klass, :id => id}, :method => remote_method}
+h3. Method declaration
+
+* .remote_method - a local (client) instance method
+* .remote_class_method - a local class method
+
+h3. Arguments
+
+* :server_class_method [boolean] - is the method a class method on the server?
+* :debug [boolean] - putses some debug statements
+* :calls [method name] - which method to call on the server
+
+h3. Method types:
+
+|method declaration                               |client         |server         |
+|remote_method :foo                               |instance method|instance method|
+|remote_method :faz, :server_class_method => true |instance method|class method   |
+|remote_class_method :baz                         |class method   |class method   |
+
+h3. Server side return values
+
+* method takes a block: the values yielded to the block are returned the client (async)
+* method returns a EM::Deferrable: the outcome of the deferrable is returned to the client (async)
+* neither nor: the return value is returned to the client (sync)
+
+Note: Wether or not a method takes a block can only be determined on ruby 1.9 and only if the block is explicitly in the signature. Most of the time this is the case in typical EM asynchronous methods as these blocks are passed around. So if you want your server method act asynchronously please be explicit in the signature of the method or - better yet - use EM:Deferrables.
+
+h3. Client side return values
+
+Unless usual RPC libraries em_remote_call methods don't just return values. To fit into the Eventmachine landscape they are either called with a block or a callback is defined on the deferrable they return. The return value of the remote execution is passed as argument into the block:
+
+<pre><code>ClientClass.foo do |result|
+  puts "server returned #{result}"
+end
 </code></pre>
 
 or
 
-That means, if the client has a book instance @book with the id 1234 and calls #read on it:
-
-<pre><code>@book.read 'fast'
+<pre><code>call = ClientClass.foo
+call.callback{ |result|
+  puts "server returned #{result}"
+}
 </code></pre>
 
-the call is sent to the server like this:
+The later has the advantage that you can define an errback, a block wich is use in case of an error:
 
-<pre><code>{:opts => 'fast', :instance => {:class => Book, :id => 1234}, :method => 'read'}
+<pre><code>call = ClientClass.foo
+call.callback{ |result| puts "server returned #{result}" }
+call.errback { |error| puts "server errored: #{error}" }
 </code></pre>
 
-and this gets executed on the server:
+This brings us to…
 
-<pre><code>Book.find(1234).read('fast')
+h3. Server side errors
+
+Errors on the server side are only handled in two cases:
+
+* The server method returns a EM:Deferrable. Then the usual errback is used.
+* The happens synchronously when parsing the call and calling the method.
+
+In case an error occurs asynchronously we can't get hold of the error and return it to the client.
+
+Errors are returned as error classes (as string) and the error message.
+
+h2. By example
+
+h2. Class methods (explaining example/class_methods.rb)
+
+We have a class on the server:
+
+<pre><code>class ServerClass
+  def self.foo(&blk)
+    EM.add_timer 1 do # do some work...
+      blk.call 42     # then return
+    end
+  end
+end
 </code></pre>
 
-:opts can be anything that JSON encodable and parseable. Namely Strings, Numbers, Arrays and Hashes.
+and a corresponding class on the client:
 
-EM::RemoteCall supports callbacks. So when you call the method on the client with a block given, the block get's stored on the client for later execution. Note that it doesn't go over the wire. While this would technically be possible, there are some issues with it. When the method on the server takes a block, the callback on the client will get triggered as soon as the block on the server is called. Example:
-
-On the client
-
-<pre><code>@book.read('fast'){puts 'finished'}
+<pre><code>class ClientClass
+  has_em_remote_class 'ServerClass', :socket => '/tmp/foo'
+  remote_class_method :foo
+end
 </code></pre>
 
-then proc{puts 'finished'} get's stored for later execution, referenced by a callback id. This goes over the wire:
+Let's start the server:
 
-<pre><code>{:opts => 'fast', :instance => {:class => Book, :id => 1234}, :method => 'read', :callback_id => 5678}
+<pre><code>EM.run do
+  EM::RemoteCall::Server.start_at '/tmp/foo'
+end
 </code></pre>
 
-Now this gets executed on the server:
+and the client:
 
-<pre><code>Book.find(1234).read('fast'){ send_data({:callback_id => 5678}) }
+<pre><code>EM.run do
+  ClientClass.foo do |result|
+    puts "server returned #{result}"
+  end
+end
 </code></pre>
 
-As soon, as the block of #read is called on the server, this message goes back over the wire to the client:
+h2. Instance methods (explaining example/instance_methods.rb)
 
-<pre><code>{:callback_id => 5678}
+For instance methods to work we have to identify the instances on the server side. This _always_ works via the corresponding instance on the client side. Server side instances are _never_ identified explicitly. (This is why the combination _client side class method_ - _server side instance method_ is missing in the _method types_ table above.
+
+To accomplish the identification of the server side instances, the :instance_finder parameter is used. By default it's the #id method, but it can be anything else:
+
+<pre><code>has_em_remote_class 'ServerClass', :socket => '/tmp/foo', :instance_finder => :name
 </code></pre>
 
-and this in turn triggers the execution of the formerly stored callback on the client.
+The simple example/instance_methods.rb doesn't go that fancy, it just uses the default #id defined in the common parent class:
 
-A special case are class methods. In the wire protocol they are just identified by :instance => {:id => nil}. In the definition just skip the :find_by parameter.
+<pre><code>class CommmonClass
+  attr_reader :id
+  def initialize(id)
+    @id = id
+  end
+end
+class ServerClass < CommmonClass
+  is_a_collection
+  
+  def foo(&blk)
+    EM.add_timer 1 do           # do some work...
+      blk.call "#{id} says 42"  # then return
+    end
+  end
+end
 
-Return values of remote methods and arguments to callback are supported, too. See specs for further examples.
+class ClientClass < CommmonClass
+  has_em_remote_class 'ServerClass', :socket => TEST_SOCKET
+  remote_method :foo
+end
+</code></pre>
 
-h2. Example (explaining example.rb)
+Let's start the server:
+
+<pre><code>EM.run do
+  ServerClass.new 23
+  EM::RemoteCall::Server.start_at TEST_SOCKET
+end
+</code></pre>
+
+… and the client:
+
+<pre><code>EM.run do
+  c = ClientClass.new 23
+  c.foo do |result|
+    puts "server returned '#{result}'"
+    EM.stop
+  end
+end
+</code></pre>
+
+Note that the corresponding instances are created before doing the actual method call. Obviously it's pretty pointless to manually generate all the instances on client and server side beforehand.
+
+Let's rectify this…
+
+h2. Example II (explaining example/instance_methods2.rb)
+
+Here, we're adding another instance #new_on_server method to the client, calling the class method #new on the server:
+
+<pre><code>remote_method :new_on_server, :calls => :new, :server_class_method => true#, :debug => true</code></pre>
+
+The complete client class:
+
+<pre><code>class ClientClass < CommmonClass
+  def initialize(id)
+    new_on_server id
+    super
+  end
+  
+  has_em_remote_class 'ServerClass', :socket => TEST_SOCKET
+  remote_method :new_on_server, :calls => :new, :server_class_method => true#, :debug => true
+  remote_method :foo#, :debug => true
+end
+</code></pre>
+
+Our new #new_on_server method is called in the clients initialize method to generate the corresponding server instance every time a client instance is made.
+
+h2. Example III (explaining example/advanced.rb)
 
 h3. Common Track class
 
