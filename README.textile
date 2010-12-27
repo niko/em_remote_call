@@ -17,7 +17,7 @@ h3. Arguments
 
 h3. Method types:
 
-|method declaration                               |client         |server         |
+|*method declaration*                             |*client*       |*server*       |
 |remote_method :foo                               |instance method|instance method|
 |remote_method :faz, :server_class_method => true |instance method|class method   |
 |remote_class_method :baz                         |class method   |class method   |
@@ -69,7 +69,7 @@ Errors are returned as error classes (as string) and the error message.
 
 h2. By example
 
-h2. Class methods (explaining example/class_methods.rb)
+h3. Class methods (explaining example/class_methods.rb)
 
 We have a class on the server:
 
@@ -106,7 +106,7 @@ and the client:
 end
 </code></pre>
 
-h2. Instance methods (explaining example/instance_methods.rb)
+h3. Instance methods (explaining example/instance_methods.rb)
 
 For instance methods to work we have to identify the instances on the server side. This _always_ works via the corresponding instance on the client side. Server side instances are _never_ identified explicitly. (This is why the combination _client side class method_ - _server side instance method_ is missing in the _method types_ table above.
 
@@ -162,7 +162,7 @@ Note that the corresponding instances are created before doing the actual method
 
 Let's rectify this…
 
-h2. Example II (explaining example/instance_methods2.rb)
+h3. Instance methods & class methods (explaining example/instance_methods2.rb)
 
 Here, we're adding another instance #new_on_server method to the client, calling the class method #new on the server:
 
@@ -184,7 +184,7 @@ end
 
 Our new #new_on_server method is called in the clients initialize method to generate the corresponding server instance every time a client instance is made.
 
-h2. Example III (explaining example/advanced.rb)
+h2. Mashing it all together (explaining example/advanced.rb)
 
 h3. Common Track class
 
