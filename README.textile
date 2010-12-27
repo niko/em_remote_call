@@ -6,21 +6,21 @@ h2. Overview
 
 h3. Method declaration
 
-* .remote_method - a local (client) instance method
-* .remote_class_method - a local class method
+* @.remote_method@ - a local (client) instance method
+* @.remote_class_method@ - a local class method
 
 h3. Arguments
 
-* :server_class_method [boolean] - is the method a class method on the server?
-* :debug [boolean] - putses some debug statements
-* :calls [method name] - which method to call on the server
+* @:server_class_method@ [boolean] - is the method a class method on the server?
+* @:debug@ [boolean] - putses some debug statements
+* @:calls@ [method name] - which method to call on the server
 
 h3. Method types:
 
-|*method declaration*                             |*client*       |*server*       |
-|remote_method :foo                               |instance method|instance method|
-|remote_method :faz, :server_class_method => true |instance method|class method   |
-|remote_class_method :baz                         |class method   |class method   |
+|*method declaration*                               |*client*       |*server*       |
+|@remote_method :foo@                               |instance method|instance method|
+|@remote_method :faz, :server_class_method => true@ |instance method|class method   |
+|@remote_class_method :baz@                         |class method   |class method   |
 
 h3. Server side return values
 
@@ -110,12 +110,12 @@ h3. Instance methods (explaining example/instance_methods.rb)
 
 For instance methods to work we have to identify the instances on the server side. This _always_ works via the corresponding instance on the client side. Server side instances are _never_ identified explicitly. (This is why the combination _client side class method_ - _server side instance method_ is missing in the _method types_ table above.
 
-To accomplish the identification of the server side instances, the :instance_finder parameter is used. By default it's the #id method, but it can be anything else:
+To accomplish the identification of the server side instances, the :instance_finder parameter is used. By default it's the @#id@ method, but it can be anything else:
 
 <pre><code>has_em_remote_class 'ServerClass', :socket => '/tmp/foo', :instance_finder => :name
 </code></pre>
 
-The simple example/instance_methods.rb doesn't go that fancy, it just uses the default #id defined in the common parent class:
+The simple example/instance_methods.rb doesn't go that fancy, it just uses the default @#id@ defined in the common parent class:
 
 <pre><code>class CommmonClass
   attr_reader :id
@@ -164,9 +164,9 @@ Let's rectify this…
 
 h3. Instance methods & class methods (explaining example/instance_methods2.rb)
 
-Here, we're adding another instance #new_on_server method to the client, calling the class method #new on the server:
+Here, we're adding another instance @#new_on_server@ method to the client, calling the class method @#new@ on the server:
 
-<pre><code>remote_method :new_on_server, :calls => :new, :server_class_method => true#, :debug => true</code></pre>
+<pre><code>remote_method :new_on_server, :calls => :new, :server_class_method => true</code></pre>
 
 The complete client class:
 
@@ -177,12 +177,12 @@ The complete client class:
   end
   
   has_em_remote_class 'ServerClass', :socket => TEST_SOCKET
-  remote_method :new_on_server, :calls => :new, :server_class_method => true#, :debug => true
+  remote_method :new_on_server, :calls => :new, :server_class_method => true
   remote_method :foo#, :debug => true
 end
 </code></pre>
 
-Our new #new_on_server method is called in the clients initialize method to generate the corresponding server instance every time a client instance is made.
+Our new @#new_on_server@ method is called in the clients initialize method to generate the corresponding server instance every time a client instance is made.
 
 h2. Mashing it all together (explaining example/advanced.rb)
 
@@ -206,11 +206,11 @@ Say we have an ordinary Track class:
 end
 </code></pre>
 
-This class contains the similar functionality on the server and the client. Note the definition of the #id method. It serves as an identifier for tracks on the client and the server.
+This class contains the similar functionality on the server and the client. Note the definition of the @#id@ method. It serves as an identifier for tracks on the client and the server.
 
 h3. ServerTrack class
 
-The server adds a #play method to the class:
+The server adds a @#play@ method to the class:
 
 <pre><code>class ServerTrack < Track
   is_a_collection
@@ -225,7 +225,7 @@ The server adds a #play method to the class:
 end
 </code></pre>
 
-Note the use of the is_a_collection gem. It provides a #find method and by default it does the lookup via the #id method (that's why we defined this above, remember?). Also note that there is no remote call specific code here. In this regards the server is completely agnostic of it being used by the client.
+Note the use of the is_a_collection gem. It provides a #find method and by default it does the lookup via the @#id@ method (that's why we defined this above, remember?). Also note that there is no remote call specific code here. In this regards the server is completely agnostic of it being used by the client.
 
 h3. ClientTrack class
 
@@ -245,8 +245,8 @@ end
 
 Here, we're specifying the remote methods. It illustrates two cases:
 
-* #init_track_on_server doesn't specify a :find_by parameter. #init_track_on_server is a instance method on the client, but call the #new class method on the server.
-* #play specifies a :find_by parameter, therefor it's an instance method on the server, too.
+* @#init_track_on_server@ doesn't specify a :find_by parameter. @#init_track_on_server@ is a instance method on the client, but call the @#new@ class method on the server.
+* @#play@ specifies a :find_by parameter, therefor it's an instance method on the server, too.
 
 Note that on initialization of a ClientTrack we initialize a ServerTrack on the server, too.
 
@@ -282,6 +282,11 @@ end
 </code></pre>
 
 First we open the connection to the server, then we initialize two tracks. As stated above: on initialization on the client side the tracks start tu exist on the server side, too. After one second we tell the server to play the first track for 2 seconds and after another second the second (defaults to 3 seconds).
+
+h2. FAQ
+
+* _How do you handle more complex data types as method arguments?_ - I don't. Method arguments and return values have to be serializable to and form JSON. Possible data types are Strings, Numbers, Array, Hashes, Booleans.
+* _How do you transport the callback blocks and their bindings over the wire?_ - I don't. Client callbacks stay on the client. They get stored there for later execution.
 
 h2. TODO
 
