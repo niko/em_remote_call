@@ -15,43 +15,54 @@ class Track
   end
 end
 
+TEST_SOCKET = File.join( File.expand_path(File.dirname(__FILE__)), 'test_socket' )
+
 class ServerTrack < Track
   is_a_collection
   
-  def initialize(opts, &callb)
-    callb.call
+  def initialize(opts={}, &callb)
+    callb.call if callb
     super
   end
   
+  # takes a block:
   def play(&callb)
     callb.call "finished #{id}"
     "started #{id}"
   end
+  
+  # raises:
   def raise_hell
     raise 'foobar'
   end
+  
+  # returns a deferrable:
   def with_deferrable(outcome = 'succeed') # does not take a block
     d = EventMachine::DefaultDeferrable.new
     d.send outcome
     return d
   end
   
-  def self.some_class_meth
-    yield
+  # doesn't take a block, just returns a hash:
+  def as_hash
+    {:title => title, :artist => artist}
+  end
+  
+  # a class method:
+  def self.some_class_meth(&blk)
+    blk.call
   end
 end
 
 class ClientTrack < Track
-  extend EM::RemoteCall
-  remote_method :init_track_on_server, :class_name => 'ServerTrack', :calls => :new
-  remote_method :play,                 :class_name => 'ServerTrack', :find_by => :id
-  remote_method :raise_hell,           :class_name => 'ServerTrack', :find_by => :id
-  remote_method :with_deferrable,      :class_name => 'ServerTrack', :find_by => :id
+  has_em_remote_class 'ServerTrack', :socket => TEST_SOCKET
   
-  class << self
-    extend EM::RemoteCall
-    remote_method :some_class_meth, :class_name => 'ServerTrack'
-  end
+  remote_method :init_track_on_server, :calls => :new, :server_class_method => true
+  remote_method :play
+  remote_method :raise_hell
+  remote_method :with_deferrable
+  remote_method :as_hash
+  remote_class_method :some_class_meth
 end
 
 class EMController
@@ -60,14 +71,11 @@ class EMController
 end
 
 def test_on_client
-  socket = File.join( File.expand_path(File.dirname(__FILE__)), 'test_socket' )
-  
   server_pid = EM.fork_reactor do
-    EM::RemoteCall::Server.start_at socket
+    EM::RemoteCall::Server.start_at TEST_SOCKET
   end
   sleep 0.1
   EM.run do
-    ClientTrack.remote_connection = EM::RemoteCall::Client.connect_to socket
     yield
     EM.add_timer 0.1 do
       Process.kill 'HUP', server_pid
@@ -82,30 +90,17 @@ describe EM::RemoteCall do
       test_on_client do
         callb = mock(:callb)
         callb.should_receive(:foo)
-        ClientTrack.new.init_track_on_server({}){callb.foo}
+        ClientTrack.new.init_track_on_server{callb.foo}
       end
     end
   end
-  describe "instance method callbacks" do
-    it "should be called" do
+  describe "class method callbacks too" do
+    it "should work twice" do
       test_on_client do
         callb = mock(:callb)
-        callb.should_receive(:foo).with('finished a - b')
-        c = ClientTrack.new(:title => 'a', :artist => 'b')
-        c.init_track_on_server(:title => 'a', :artist => 'b')
-        c.play{|a| callb.foo a}
-      end
-    end
-  end
-  describe "errbacks" do
-    it "should take an errback method" do
-      test_on_client do
-        callb = mock(:callb)
-        callb.should_receive(:foo).with({:class=>"RuntimeError", :message=>"foobar"})
-        c = ClientTrack.new(:title => 'a', :artist => 'b')
-        c.init_track_on_server(:title => 'a', :artist => 'b')
-        play_call = c.raise_hell
-        play_call.errback{|a| callb.foo a}
+        callb.should_receive(:foo).twice
+        ClientTrack.new.init_track_on_server{callb.foo}
+        ClientTrack.new.init_track_on_server{callb.foo}
       end
     end
   end
@@ -118,15 +113,28 @@ describe EM::RemoteCall do
       end
     end
   end
+  describe "without block or deferrable" do
+    it "should return just the return value" do
+      test_on_client do
+        callb = mock(:callb)
+        properties = {:artist => 'a', :title => 't'}
+        callb.should_receive(:foo).with(properties)
+        c = ClientTrack.new properties
+        c.init_track_on_server properties do
+          c.as_hash{|r| callb.foo(r)}
+        end
+      end
+    end
+  end
   describe "with a deferrable" do
     describe "on success" do
       describe "with a block" do
         it "should use the block as callback" do
           test_on_client do
             callb = mock(:callb)
-            callb.should_receive(:foo).with()
+            callb.should_receive(:foo)
             c = ClientTrack.new
-            c.init_track_on_server({})
+            c.init_track_on_server
             c.with_deferrable(:succeed){ callb.foo }
           end
         end
@@ -135,9 +143,9 @@ describe EM::RemoteCall do
         it "should use callback" do
           test_on_client do
             callb = mock(:callb)
-            callb.should_receive(:foo).with()
+            callb.should_receive(:foo)
             c = ClientTrack.new
-            c.init_track_on_server({})
+            c.init_track_on_server
             play_call = c.with_deferrable(:succeed)
             play_call.callback{ callb.foo }
           end
@@ -148,9 +156,9 @@ describe EM::RemoteCall do
       it "should use errback" do
         test_on_client do
           callb = mock(:callb)
-          callb.should_receive(:foo).with()
+          callb.should_receive(:foo)
           c = ClientTrack.new
-          c.init_track_on_server({})
+          c.init_track_on_server
           play_call = c.with_deferrable(:fail)
           play_call.errback{ callb.foo }
         end
