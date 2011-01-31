@@ -28,7 +28,7 @@ h3. Server side return values
 * method returns a EM::Deferrable: the outcome of the deferrable is returned to the client (async)
 * neither nor: the return value is returned to the client (sync)
 
-Note: Wether or not a method takes a block can only be determined on ruby 1.9 and only if the block is explicitly in the signature. Most of the time this is the case in typical EM asynchronous methods as these blocks are passed around. So if you want your server method act asynchronously please be explicit in the signature of the method or - better yet - use EM:Deferrables.
+Note: Whether or not a method takes a block can only be determined on ruby 1.9 and only if the block is explicitly in the signature. Most of the time this is the case in typical EM asynchronous methods as these blocks are passed around. So if you want your server method act asynchronously please be explicit in the signature of the method or - better yet - use EM:Deferrables.
 
 h3. Client side return values
 
